@@ -1,8 +1,16 @@
 `timescale 1ns/1ps
 
 // ============================================================================
-// 8 路、4 beat 的 32 项 Q1.15 点积自检测试平台。
-// 覆盖：零值、0.5、正负极值、已知平方和、随机向量、输入气泡、周期指标。
+// 文件名称：tb_mac32_8lane_top.sv
+// 模块名称：tb_mac32_8lane_top
+// 功能说明：8 路、4 beat 的 32 项 Q1.15 点积自检测试平台。
+//           覆盖零值、0.5、正负极值、已知平方和、随机向量、输入气泡
+//           以及延迟和吞吐率指标检查。
+// 设计语言：SystemVerilog
+// 设计属性：仅用于前仿验证，不参与综合
+// 作者：changting
+// 日期：2026-09-08
+// 版本：1.0
 // ============================================================================
 module tb_mac32_8lane_top;
     localparam integer RANDOM_CASES = 128;
@@ -47,6 +55,7 @@ module tb_mac32_8lane_top;
         .result(result)
     );
 
+    // 时钟与周期计数：产生 100 MHz 时钟，并记录复位释放后的周期数。
     initial clk = 1'b0;
     always #5 clk = ~clk;
 
@@ -57,6 +66,10 @@ module tb_mac32_8lane_top;
             cycle_count <= cycle_count + 1;
     end
 
+    // ------------------------------------------------------------------------
+    // 激励准备：根据 pattern_id 生成确定性边界向量或随机向量，
+    // 同时使用 64 bit 有符号整数计算独立黄金参考结果。
+    // ------------------------------------------------------------------------
     task automatic prepare_vector(input integer pattern_id);
         integer index;
         begin
@@ -90,6 +103,7 @@ module tb_mac32_8lane_top;
         end
     endtask
 
+    // 驱动空闲周期：撤销握手信号并清零输入总线。
     task automatic drive_idle;
         integer lane;
         begin
@@ -103,6 +117,10 @@ module tb_mac32_8lane_top;
         end
     endtask
 
+    // ------------------------------------------------------------------------
+    // 单用例执行：发送四个有效 beat，可按 bubble_mask 插入输入气泡；
+    // 随后检查数值、首拍到结果延迟、末拍到结果延迟及任务启动间隔。
+    // ------------------------------------------------------------------------
     task automatic run_case(input integer pattern_id, input integer bubble_mask);
         integer beat;
         integer lane;
@@ -170,6 +188,9 @@ module tb_mac32_8lane_top;
         end
     endtask
 
+    // ------------------------------------------------------------------------
+    // 主测试流程：完成复位、边界测试、随机回归和周期指标汇总。
+    // ------------------------------------------------------------------------
     initial begin
         rst_n = 1'b0;
         start = 1'b0;
@@ -212,6 +233,7 @@ module tb_mac32_8lane_top;
         $finish;
     end
 
+    // 超时保护：防止握手或状态机错误导致仿真永久等待。
     initial begin
         #500000;
         $display("[FAIL] simulation timeout");

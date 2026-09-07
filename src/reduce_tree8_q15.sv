@@ -1,11 +1,17 @@
 `timescale 1ns/1ps
 
 // ============================================================================
+// 文件名称：reduce_tree8_q15.sv
 // 模块名称：reduce_tree8_q15
 // 功能说明：把 8 路 40 bit 局部累加结果通过三级平衡树归约为一个结果。
 // 位宽增长：8×40 -> 4×41 -> 2×42 -> 1×43。
 //           32 项 Q1.15 点积的真实结果最多需要 37 bit，故输出低 40 bit
 //           保留完整数值；高 3 bit 只应为符号扩展。
+// 设计语言：SystemVerilog
+// 设计风格：可综合、单时钟同步时序、低有效异步复位、无锁存器
+// 作者：changting
+// 日期：2026-09-08
+// 版本：1.0
 // ============================================================================
 module reduce_tree8_q15 (
     input  logic                       clk,
@@ -22,6 +28,11 @@ module reduce_tree8_q15 (
     logic [2:0]         valid_pipe;
 
     integer i;
+
+    // ------------------------------------------------------------------------
+    // 三级流水归约：每一级均增加 1 bit，防止有符号加法溢出。
+    // valid_pipe 与三级数据寄存器同步推进，用于标记最终结果有效周期。
+    // ------------------------------------------------------------------------
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             valid_pipe <= '0;
@@ -31,6 +42,7 @@ module reduce_tree8_q15 (
                 sum_l2[i] <= '0;
             sum_l3 <= '0;
         end else begin
+            // 有效标志流水：与三级加法树的结果延迟严格对齐。
             valid_pipe[0] <= in_valid;
             valid_pipe[1] <= valid_pipe[0];
             valid_pipe[2] <= valid_pipe[1];
@@ -55,6 +67,7 @@ module reduce_tree8_q15 (
         end
     end
 
+    // 输出功能：第三级完成时产生有效脉冲，并截取完整的 40 bit 点积结果。
     assign out_valid = valid_pipe[2];
     assign result = sum_l3[39:0];
 
