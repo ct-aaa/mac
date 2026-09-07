@@ -2,4 +2,7 @@ docs
 memory
 reference
 requires
-sim
+sim/*
+!sim/scripts/
+sim/scripts/*
+!sim/scripts/run_vsim_gui.ps1
