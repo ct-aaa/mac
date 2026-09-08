@@ -30,7 +30,7 @@ if {![file exists modelsim.ini]} {vmap -c}
 if {[file exists work]} {vdel -lib work -all}
 vlib work
 vmap work work
-vlog -sv ../src/mac_lane_q15.sv ../src/mac32_8lane_ctrl.sv ../src/reduce_tree8_q15.sv ../src/mac32_8lane_top.sv ../tb/tb_mac32_8lane_top.sv
+vlog ../src/mac_lane_q15.v ../src/mac32_8lane_ctrl.v ../src/reduce_tree8_q15.v ../src/mac32_8lane_top.v ../src/mac_top.v ../tb/tb_mac32_8lane_top.v ../tb/tb_mac_top_fpga.v
 vsim -voptargs=+acc work.tb_mac32_8lane_top
 add wave -divider {Top control}
 add wave sim:/tb_mac32_8lane_top/clk
@@ -48,13 +48,13 @@ add wave sim:/tb_mac32_8lane_top/dut/lane_valid
 add wave sim:/tb_mac32_8lane_top/dut/lane_first
 add wave sim:/tb_mac32_8lane_top/dut/lane_last
 add wave -divider {Representative MAC lane 0}
-add wave -radix decimal sim:/tb_mac32_8lane_top/a_in(0)
-add wave -radix decimal sim:/tb_mac32_8lane_top/b_in(0)
+add wave -radix decimal {sim:/tb_mac32_8lane_top/a_in[15:0]}
+add wave -radix decimal {sim:/tb_mac32_8lane_top/b_in[15:0]}
 add wave -radix decimal sim:/tb_mac32_8lane_top/dut/g_mac_lanes(0)/u_lane/product_d1
 add wave -radix decimal sim:/tb_mac32_8lane_top/dut/g_mac_lanes(0)/u_lane/acc_out
 add wave -divider {Three-stage reduction tree}
-add wave -radix decimal sim:/tb_mac32_8lane_top/dut/u_reduce_tree/sum_l1(0)
-add wave -radix decimal sim:/tb_mac32_8lane_top/dut/u_reduce_tree/sum_l2(0)
+add wave -radix decimal sim:/tb_mac32_8lane_top/dut/u_reduce_tree/sum_l1_0
+add wave -radix decimal sim:/tb_mac32_8lane_top/dut/u_reduce_tree/sum_l2_0
 add wave -radix decimal sim:/tb_mac32_8lane_top/dut/u_reduce_tree/sum_l3
 run -all
 wave zoom full

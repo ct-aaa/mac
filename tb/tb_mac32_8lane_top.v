@@ -1,36 +1,34 @@
 `timescale 1ns/1ps
 
 // ============================================================================
-// 文件名称：tb_mac32_8lane_top.sv
+// 文件名称：tb_mac32_8lane_top.v
 // 模块名称：tb_mac32_8lane_top
-// 功能说明：8 路、4 beat 的 32 项 Q1.15 点积自检测试平台。
-//           覆盖零值、0.5、正负极值、已知平方和、随机向量、输入气泡
-//           以及延迟和吞吐率指标检查。
-// 设计语言：SystemVerilog
-// 设计属性：仅用于前仿验证，不参与综合
+// 功能说明：8 路、4 beat 的 32 项点积 Verilog-2001 自检测试平台。
+//           覆盖边界值、已知平方和、随机向量、输入气泡、延迟和吞吐。
+// 设计属性：仅用于仿真，不参与综合
 // 作者：changting
 // 日期：2026-09-08
-// 版本：1.0
+// 版本：1.1
 // ============================================================================
 module tb_mac32_8lane_top;
-    localparam integer RANDOM_CASES = 128;
+    parameter RANDOM_CASES = 128;
 
-    logic clk;
-    logic rst_n;
-    logic start;
-    logic in_valid;
-    logic in_ready;
-    logic signed [15:0] a_in [0:7];
-    logic signed [15:0] b_in [0:7];
+    reg clk;
+    reg rst_n;
+    reg start;
+    reg in_valid;
+    wire in_ready;
+    reg [127:0] a_in;
+    reg [127:0] b_in;
     wire result_valid;
     wire busy;
     wire signed [39:0] result;
 
-    logic signed [15:0] vector_a [0:31];
-    logic signed [15:0] vector_b [0:31];
-    longint signed expected;
-    longint signed av;
-    longint signed bv;
+    reg signed [15:0] vector_a [0:31];
+    reg signed [15:0] vector_b [0:31];
+    reg signed [63:0] expected;
+    reg signed [63:0] av;
+    reg signed [63:0] bv;
     integer cycle_count;
     integer errors;
     integer checked;
@@ -55,7 +53,6 @@ module tb_mac32_8lane_top;
         .result(result)
     );
 
-    // 时钟与周期计数：产生 100 MHz 时钟，并记录复位释放后的周期数。
     initial clk = 1'b0;
     always #5 clk = ~clk;
 
@@ -66,62 +63,73 @@ module tb_mac32_8lane_top;
             cycle_count <= cycle_count + 1;
     end
 
-    // ------------------------------------------------------------------------
-    // 激励准备：根据 pattern_id 生成确定性边界向量或随机向量，
-    // 同时使用 64 bit 有符号整数计算独立黄金参考结果。
-    // ------------------------------------------------------------------------
-    task automatic prepare_vector(input integer pattern_id);
+    // 生成测试向量，并用独立的 64 bit 有符号累加计算黄金结果。
+    task prepare_vector;
+        input integer pattern_id;
         integer index;
         begin
             for (index = 0; index < 32; index = index + 1) begin
                 case (pattern_id)
-                    0: begin vector_a[index] = 16'sd0;    vector_b[index] = 16'sd0; end
-                    1: begin vector_a[index] = 16'sh4000; vector_b[index] = 16'sh4000; end
-                    2: begin vector_a[index] = 16'sh7fff; vector_b[index] = 16'sh7fff; end
-                    3: begin vector_a[index] = 16'sh8000; vector_b[index] = 16'sh8000; end
+                    0: begin
+                        vector_a[index] = 16'sd0;
+                        vector_b[index] = 16'sd0;
+                    end
+                    1: begin
+                        vector_a[index] = 16'sh4000;
+                        vector_b[index] = 16'sh4000;
+                    end
+                    2: begin
+                        vector_a[index] = 16'sh7fff;
+                        vector_b[index] = 16'sh7fff;
+                    end
+                    3: begin
+                        vector_a[index] = 16'sh8000;
+                        vector_b[index] = 16'sh8000;
+                    end
                     4: begin
-                        vector_a[index] = index[0] ? 16'sh7fff : 16'sh8000;
-                        vector_b[index] = index[0] ? 16'sh8000 : 16'sh7fff;
+                        if ((index % 2) != 0) begin
+                            vector_a[index] = 16'sh7fff;
+                            vector_b[index] = 16'sh8000;
+                        end else begin
+                            vector_a[index] = 16'sh8000;
+                            vector_b[index] = 16'sh7fff;
+                        end
                     end
                     5: begin
                         vector_a[index] = index + 1;
                         vector_b[index] = index + 1;
                     end
                     default: begin
-                        vector_a[index] = $urandom;
-                        vector_b[index] = $urandom;
+                        vector_a[index] = $random;
+                        vector_b[index] = $random;
                     end
                 endcase
             end
 
-            expected = 0;
+            expected = 64'sd0;
             for (index = 0; index < 32; index = index + 1) begin
-                av = $signed(vector_a[index]);
-                bv = $signed(vector_b[index]);
+                av = vector_a[index];
+                bv = vector_b[index];
                 expected = expected + av * bv;
             end
         end
     endtask
 
-    // 驱动空闲周期：撤销握手信号并清零输入总线。
-    task automatic drive_idle;
-        integer lane;
+    // 驱动一个空闲周期。
+    task drive_idle;
         begin
             @(negedge clk);
-            start = 1'b0;
+            start    = 1'b0;
             in_valid = 1'b0;
-            for (lane = 0; lane < 8; lane = lane + 1) begin
-                a_in[lane] = '0;
-                b_in[lane] = '0;
-            end
+            a_in     = 128'd0;
+            b_in     = 128'd0;
         end
     endtask
 
-    // ------------------------------------------------------------------------
-    // 单用例执行：发送四个有效 beat，可按 bubble_mask 插入输入气泡；
-    // 随后检查数值、首拍到结果延迟、末拍到结果延迟及任务启动间隔。
-    // ------------------------------------------------------------------------
-    task automatic run_case(input integer pattern_id, input integer bubble_mask);
+    // 发送四个有效 beat，可按 bubble_mask 在 beat 前插入空拍。
+    task run_case;
+        input integer pattern_id;
+        input integer bubble_mask;
         integer beat;
         integer lane;
         integer start_interval;
@@ -133,18 +141,17 @@ module tb_mac32_8lane_top;
                 @(negedge clk);
 
             for (beat = 0; beat < 4; beat = beat + 1) begin
-                // bubble_mask 的 bit1..bit3 控制对应 beat 前是否插入一个气泡。
                 if ((beat > 0) && ((bubble_mask & (1 << beat)) != 0)) begin
-                    drive_idle();
+                    drive_idle;
                     inserted_bubbles = inserted_bubbles + 1;
                 end
 
                 @(negedge clk);
-                start = (beat == 0);
+                start    = (beat == 0);
                 in_valid = 1'b1;
                 for (lane = 0; lane < 8; lane = lane + 1) begin
-                    a_in[lane] = vector_a[beat*8 + lane];
-                    b_in[lane] = vector_b[beat*8 + lane];
+                    a_in[(lane*16) +: 16] = vector_a[(beat*8) + lane];
+                    b_in[(lane*16) +: 16] = vector_b[(beat*8) + lane];
                 end
 
                 if (beat == 0)
@@ -153,18 +160,19 @@ module tb_mac32_8lane_top;
                     current_last_cycle = cycle_count + 1;
             end
 
-            drive_idle();
+            drive_idle;
             wait (result_valid === 1'b1);
             #1;
             current_result_cycle = cycle_count;
             checked = checked + 1;
 
-            if ($signed(result) !== expected) begin
+            if ($signed(result) !== $signed(expected[39:0])) begin
                 errors = errors + 1;
                 $display("[FAIL] case=%0d got=%0d expected=%0d",
                          checked, $signed(result), expected);
             end
-            if ((current_result_cycle-current_start_cycle) != (7+inserted_bubbles)) begin
+            if ((current_result_cycle-current_start_cycle) !=
+                (7+inserted_bubbles)) begin
                 errors = errors + 1;
                 $display("[FAIL] case=%0d latency=%0d expected=%0d",
                          checked, current_result_cycle-current_start_cycle,
@@ -188,33 +196,26 @@ module tb_mac32_8lane_top;
         end
     endtask
 
-    // ------------------------------------------------------------------------
-    // 主测试流程：完成复位、边界测试、随机回归和周期指标汇总。
-    // ------------------------------------------------------------------------
     initial begin
         rst_n = 1'b0;
         start = 1'b0;
         in_valid = 1'b0;
+        a_in = 128'd0;
+        b_in = 128'd0;
         errors = 0;
         checked = 0;
         previous_start_cycle = -1;
-        for (i = 0; i < 8; i = i + 1) begin
-            a_in[i] = '0;
-            b_in[i] = '0;
-        end
 
         repeat (3) @(negedge clk);
         rst_n = 1'b1;
 
-        // 六个确定性边界用例。
         for (case_index = 0; case_index < 6; case_index = case_index + 1)
             run_case(case_index, 0);
 
-        // 128 个随机无气泡用例，检查连续任务的固定 II=8。
-        for (case_index = 0; case_index < RANDOM_CASES; case_index = case_index + 1)
+        for (case_index = 0; case_index < RANDOM_CASES;
+             case_index = case_index + 1)
             run_case(6, 0);
 
-        // 三个随机气泡用例，分别在不同 beat 前暂停。
         run_case(6, 2);
         run_case(6, 4);
         run_case(6, 10);
@@ -233,7 +234,6 @@ module tb_mac32_8lane_top;
         $finish;
     end
 
-    // 超时保护：防止握手或状态机错误导致仿真永久等待。
     initial begin
         #500000;
         $display("[FAIL] simulation timeout");
