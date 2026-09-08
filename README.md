@@ -25,8 +25,7 @@
 │  ├─ tb_mac32_8lane_top.v    # 正常随机激励测试顶层
 │  └─ tb_mac_top_fpga.v       # FPGA LED 展示测试顶层
 ├─ tb_mac_top_asic.v          # 用户提供的参考源码，不计入正式测试
-└─ sim/scripts/
-   └─ run_vsim_gui.ps1        # ModelSim GUI 启动脚本
+
 ```
 
 ## 计算核心接口
@@ -58,12 +57,5 @@
 1. `tb_mac32_8lane_top.v`：正常随机激励测试顶层。它直接验证 `mac32_8lane_top` 计算核心，包含 6 个确定性边界用例、128 个随机用例和 3 个带输入气泡的随机用例，共 137 个点积测试，同时检查结果、固定延迟和事务启动间隔。
 2. `tb_mac_top_fpga.v`：FPGA LED 展示测试顶层。它验证三端口 `mac_top` 复位后自动计算 `1*1+2*2+...+32*32=11440`，并检查结果正确后 LED 是否持续保持点亮。
 
-根目录的 `tb_mac_top_asic.v` 是用户提供的实现参考，不作为第三套正式测试，也不加入默认回归。
-
-在项目根目录执行：
-
-```powershell
-.\sim\scripts\run_vsim_gui.ps1
-```
 
 脚本以 Verilog 模式编译 `src/` 和 `tb/` 下的正式源码，并默认启动正常随机激励顶层 `tb_mac32_8lane_top`。需要验证 FPGA 展示功能时，在 Vivado 或其他 Verilog-2001 仿真器中将 `tb_mac_top_fpga` 设为仿真顶层。
